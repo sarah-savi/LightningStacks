@@ -48,3 +48,55 @@
     nonce: uint
   }
 )
+
+;; Private Functions
+
+(define-private (is-valid-channel-id (channel-id (buff 32)))
+  (is-eq (len channel-id) u32))
+
+(define-private (is-valid-deposit (amount uint))
+  (> amount u1000))
+
+(define-private (is-valid-signature (signature (buff 65)))
+  (is-eq (len signature) u65))
+
+(define-private (uint-to-buff (n uint))
+  (unwrap-panic (to-consensus-buff? n)))
+
+(define-private (verify-signature 
+  (message (buff 256))
+  (signature (buff 65))
+  (signer principal)
+)
+  (if (is-eq tx-sender signer)
+    true
+    false
+  ))
+
+;; Public Functions: Channel Management
+
+(define-public (create-channel 
+  (channel-id (buff 32)) 
+  (participant-b principal)
+  (initial-deposit uint)
+)
+  (begin
+    (asserts! (is-valid-channel-id channel-id) ERR-INVALID-INPUT)
+    (asserts! (is-valid-deposit initial-deposit) ERR-INVALID-INPUT)
+    (asserts! (not (is-eq tx-sender participant-b)) ERR-INVALID-INPUT)
+
+    (asserts! (is-none (map-get? payment-channels {
+      channel-id: channel-id, 
+      participant-a: tx-sender, 
+      participant-b: participant-b
+    })) ERR-CHANNEL-EXISTS)
+
+    (try! (stx-transfer? initial-deposit tx-sender (as-contract tx-sender)))
+
+    (map-set payment-channels 
+      { channel-id: channel-id, participant-a: tx-sender, participant-b: participant-b }
+      { total-deposited: initial-deposit, balance-a: initial-deposit, balance-b: u0,
+        is-open: true, dispute-deadline: u0, nonce: u0 }
+    )
+    (ok true)
+  ))
